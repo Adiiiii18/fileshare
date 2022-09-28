@@ -1,0 +1,243 @@
+<html>
+
+<head>
+  <title>Sharing files using WebRTC</title>
+  <link href="sharefiles.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/simplepeer.min.js"></script>
+  <!-- <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"> -->
+
+  <!-- jQuery library -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <!-- Latest compiled JavaScript -->
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/downloadjs/1.4.8/download.min.js"></script>
+
+</head>
+
+<body>
+
+  <div class="id">
+    <p>Your id</p>
+    <h1 class="myid" id="myid"></h1>
+    <div class="connected" id="connected"></div>
+  </div>
+
+  <div class="input">
+    <input class="inputid" type="number" name="hisid" placeholder="Enter other device id">
+    <input type="hidden" name="myid">
+    <input class="sendidBtn" type="button" value="Connect" onclick="sendrequest()">
+  </div>
+  
+  <div class="choose">
+    <input class="choosefile" type="file" multiple="multiple" id="f1" onchange="addfilestoarray()"></input>
+    <label class="choosefilelable" for="f1">
+      <span class="material-icons">
+        attach_file
+      </span>
+      Choose file
+    </label>
+    <button class="sendFilesButton" onclick="sendfiles()">send</button>
+  </div>
+
+  <div class="table">
+    <table>
+      <thead>
+        <tr>
+          <th>File name</th>
+          <th>File size</th>
+          <th>Remove file</th>
+          <th>File progress</th>
+        </tr>
+      </thead>
+      <tbody id="filetable">
+
+      </tbody>
+  
+    </table>
+  </div>
+  <p id="caller" style="display:none"></p>
+  <div class="popup" id="popup">
+    <p id="appenduserid"> </p>
+    <Button class="ok" onclick="socket.emit('accept',[document.getElementById('caller').innerHTML,document.getElementsByName('myid')[0].value]);showconnecting();isinitiator=true; loadjs()">OK</Button>
+    
+    <Button class="cancel" onclick="popup()">cancel</Button>
+  </div>
+
+
+  <button class="popupbtn" type="button" id="displaypopup" class="btn btn-primary" data-toggle="modal"
+    data-target="#exampleModalLong" onclick="popup()"></button>
+
+
+  
+</body>
+
+<script>
+  var selectedfilearray = []
+  var jsElm = document.createElement("script");
+  var towhomconnect
+
+  function showconnecting() {
+    //show user that users are connecting
+  }
+  socket = io.connect()
+
+  socket.on("myrandomid", function (myrandomid) {
+    document.getElementById("myid").innerHTML = "<br>" + myrandomid + "<br >"
+    document.getElementsByName("myid")[0].value = myrandomid
+  })
+
+  socket.on("makeconnection", function (hisid) {
+    document.getElementById("caller").innerHTML = hisid
+    document.getElementById("appenduserid").innerHTML=hisid
+      popup()
+
+
+  })
+  socket.on("accepted", whosrequest => {
+    document.getElementById("caller").innerHTML = whosrequest
+
+    if (whosrequest == document.getElementsByName("hisid")[0].value) {
+      towhomconnect = whosrequest
+      console.log(whosrequest)
+      // alert("accepted")
+      showconnecting()
+      isinitiator = false
+
+
+    }
+  })
+
+  socket.on("rejected", whosrequest => {
+    alert("rejected")
+  })
+  socket.on("peerid", pid => {
+    if (!isinitiator)
+      loadjs()
+    console.log(pid)
+    if (towhomconnect == document.getElementsByName("hisid")[0].value) {
+      jsElm.onload = function () {
+        callpeertoconnect(pid);
+        console.log("andar aaya")
+      }
+
+    }
+    else {
+      console.log("uska id nai hai")
+      console.log(towhomconnect, document.getElementsByName("hisid")[0].value)
+    }
+    if (isinitiator == true)
+      callpeertoconnect(pid);
+
+
+  })
+
+  function sendrequest() {
+    socket.emit("sendrequest", [document.getElementsByName("myid")[0].value, document.getElementsByName("hisid")[0].value])
+  }
+
+
+  function loadjs() {
+
+    jsElm.type = "text/javascript";
+    jsElm.src = "peerconnection.js";
+    document.body.append(jsElm);
+
+  }
+
+
+
+  function sendfiles() {
+    selectedfilearray.forEach(file => {
+      console.log(file["name"])
+      file.arrayBuffer().then(
+        filedata => {
+          peer.send(file["name"])
+          chunksize = 30 * 1024
+          totalsize = filedata.byteLength
+          a = Date.now()-1000
+          console.log(Date.now())
+          while (filedata.byteLength) {
+            tosend = filedata.slice(0, chunksize)
+            filedata = filedata.slice(chunksize, filedata.byteLength)
+            peer.send(tosend)
+
+            if (Date.now() - a >= 100) {
+              document.getElementsByName(file["name"])[1].setAttribute("style", "width:" + (totalsize - filedata.byteLength) / totalsize * 100 + "%")
+              document.getElementsByName(file["name"])[1].innerHTML = (totalsize - filedata.byteLength) / totalsize * 100
+            //  console.log((totalsize - filedata.byteLength) / totalsize * 100)
+              a = Date.now()
+      
+            }
+            else {
+            }
+
+          }
+          console.log(Date.now())
+          
+          peer.send("done")
+
+        })
+    })
+
+  }
+  function displayonUI(fname, fsize) {    //this will not allow multifile  with same name i will change it in future to allow multiple file wiht same name
+    document.getElementById("filetable").innerHTML += 
+    `<tr name="${fname}">
+      <td class="filename">${fname}</td>
+      <td>${fsize}</td>
+      <td><button class="removeBtn" id='${fname}' onclick='removefilefromarray(this)'><span class="material-icons">delete</span></button></td>
+      <td><div class="progress">  <div class="progress-bar" role="progressbar" style="width: 0.1%;"  name ="${fname}"  </div></div></td>
+    <tr>`
+  }
+  function isfilealreadyselected(filetocheck) {
+    isduplicate = false
+    selectedfilearray.forEach(file => {
+      if (file["name"] == filetocheck["name"] && file["lastmodified"] == filetocheck["namlastmodifiede"]) {
+        isduplicate = true
+      }
+    })
+    if (!isduplicate)
+      displayonUI(filetocheck["name"], filetocheck["size"])
+    return isduplicate
+  }
+
+
+  function addfilestoarray() {
+    var file = document.getElementById("f1")
+    Object.values(file.files).forEach(eachfile => {
+      if (!isfilealreadyselected(eachfile))
+        selectedfilearray.push(eachfile)
+    });
+    console.log(selectedfilearray)
+  }
+
+  function removefilefromarray(idofele) {
+    idofele = idofele.id
+    pos = 0
+    Object.values(selectedfilearray).forEach(file => {
+      if (file["name"] == idofele) {
+        console.log(pos)
+        selectedfilearray.splice(pos, 1)
+      }
+      pos++
+    })
+    document.getElementsByName(idofele)[0].remove()
+    console.log(selectedfilearray)
+  }
+
+
+  function popup(){
+    // var blur = document.getElementById('blur');
+    // blur.classList.toggle('active');
+    var popup = document.getElementById('popup');
+    popup.classList.toggle('active');
+    sendrequest();
+    // socket.emit('accept',[document.getElementById('caller').innerHTML,document.getElementsByName('myid')[0].value]);showconnecting();isinitiator=true; loadjs()
+  }
+</script>
+
+</html>
